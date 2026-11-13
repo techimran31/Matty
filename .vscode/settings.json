@@ -1,0 +1,12 @@
+{
+  // Point VS Code / Pylance at the project's virtual environment, so imports
+  // resolve against the packages Matty actually uses.
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+
+  // matty_voice.py aliases PyAudioWPatch to the name "pyaudio" at runtime.
+  // Pylance cannot see that alias, so it warns that "pyaudio" is missing.
+  // The alias is intentional and works, so the warning is turned off here.
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingModuleSource": "none"
+  }
+}

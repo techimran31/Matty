@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MATTY · Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* =====================================================================
+     MATTY · interface stylesheet
+     ---------------------------------------------------------------------
+     Page contract (do not rename - Python writes these):
+       window.setMattyState(state, text)   -> #statusBadge #centerStatus #waveState
+       window.addMattyLog(role, text)      -> #log   (role: you | matty | sys)
+       window.setVitals(cpu,ram,disk,batt) -> #cpuBar #ramBar #diskBar #battBar
+       window.setMicLevel(pct)             -> #micBar #micVal
+       window.setCloudStatus(online)       -> #cloudState
+     ===================================================================== */
+
+  :root {
+    --bg: #07040a;
+    --surface: #120810;
+    --surface-2: #1a0b14;
+    --surface-3: #260f1b;
+    --line: rgba(255, 60, 60, .12);
+    --line-strong: rgba(255, 60, 60, .30);
+    --text: #f2e3d9;
+    --muted: #a1727a;
+    --mint: #ff3b2f;      /* primary accent: blood red */
+    --coral: #ff8a3d;     /* ember orange */
+    --amber: #ffb020;
+    --violet: #c026d3;    /* hell violet ("you") */
+    --bone: #e8d9c8;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --display: "Cinzel Decorative", "Inter", serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* hellfire glow in the corners + slow breathing */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(760px 460px at 10% -10%, rgba(255, 59, 47, .20), transparent 62%),
+      radial-gradient(700px 420px at 98% 112%, rgba(255, 138, 61, .14), transparent 62%),
+      radial-gradient(900px 620px at 50% 125%, rgba(192, 38, 211, .12), transparent 65%);
+    animation: breathe 7s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @keyframes breathe {
+    0%, 100% { opacity: .82; }
+    50%      { opacity: 1; }
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    47%      { opacity: .92; }
+    49%      { opacity: .55; }
+    51%      { opacity: .95; }
+  }
+
+  #app {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 316px minmax(0, 1fr) 372px;
+    grid-template-rows: 66px minmax(0, 1fr) 36px;
+    gap: 14px;
+    padding: 14px;
+  }
+
+  /* ---------- top bar ---------- */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 0 22px;
+    background: linear-gradient(160deg, rgba(38, 12, 20, .95), rgba(10, 4, 8, .98));
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+    box-shadow: inset 0 -1px 0 rgba(255, 59, 47, .18);
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark {
+    width: 34px; height: 34px;
+    border-radius: 2px;
+    background: linear-gradient(150deg, #ff8a3d, var(--mint) 55%, #7a0b12);
+    box-shadow: 0 0 26px rgba(255, 59, 47, .55), inset 0 0 12px rgba(0, 0, 0, .55);
+    display: grid; place-items: center;
+    font-family: var(--display);
+    font-weight: 900; font-size: 17px; color: #0a0306;
+    transform: rotate(-3deg);
+  }
+  .brand-name {
+    font-family: var(--display);
+    font-size: 19px; font-weight: 900; letter-spacing: 5px;
+    color: var(--bone);
+    text-shadow: 0 0 18px rgba(255, 59, 47, .45);
+  }
+  .brand-sub {
+    font-size: 9px; letter-spacing: 2.4px; color: var(--muted);
+    text-transform: uppercase; margin-top: 2px;
+  }
+
+  .clock-block { text-align: center; line-height: 1.15; }
+  .clock {
+    font-family: var(--mono); font-size: 21px; font-weight: 600;
+    letter-spacing: 2px; color: var(--text);
+  }
+  .clock-date {
+    font-size: 9.5px; letter-spacing: 2px; color: var(--muted);
+    text-transform: uppercase; margin-top: 3px;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 13px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    font-size: 9.5px; font-weight: 600; letter-spacing: 1.6px;
+    text-transform: uppercase; color: var(--muted);
+    background: var(--surface-2);
+  }
+  .pill strong { color: var(--mint); font-weight: 600; letter-spacing: 1.6px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- panels ---------- */
+  .card {
+    background: linear-gradient(160deg, rgba(30, 10, 17, .94), rgba(11, 4, 8, .97));
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    /* cut top-right and bottom-left corners: sharp, not friendly */
+    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+    box-shadow: inset 0 0 0 1px rgba(255, 59, 47, .04), 0 10px 30px rgba(0, 0, 0, .45);
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 9.5px; font-weight: 600; letter-spacing: 2.2px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .card-tag {
+    font-family: var(--mono); font-size: 8.5px; letter-spacing: 1.2px;
+    color: var(--mint); opacity: .8;
+  }
+
+  /* ---------- left rail ---------- */
+  .rail { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+  .status-card { flex: 0 0 auto; }
+
+  .status-word {
+    font-family: var(--display);
+    font-size: 29px; font-weight: 900; letter-spacing: 5px;
+    color: var(--mint);
+    text-shadow: 0 0 22px rgba(255, 59, 47, .6), 0 0 46px rgba(255, 59, 47, .25);
+    animation: flicker 6s linear infinite;
+    transition: color .25s ease;
+  }
+  .status-sub {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px;
+    color: var(--muted); text-transform: uppercase; margin-top: 5px;
+  }
+
+  .session {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 13px; padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .session b { font-family: var(--mono); font-size: 12px; color: var(--text); }
+
+  .wave-wrap {
+    margin-top: 13px;
+    height: 66px;
+    border-radius: 11px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  #wave { width: 100%; height: 100%; display: block; }
+
+  .mic-row {
+    display: flex; align-items: center; gap: 10px; margin-top: 13px;
+  }
+  .mic-label {
+    font-size: 9px; letter-spacing: 1.8px; color: var(--muted);
+    text-transform: uppercase; min-width: 30px;
+  }
+  .meter {
+    flex: 1; height: 5px; border-radius: 999px;
+    background: var(--surface-3); overflow: hidden;
+  }
+  .meter i {
+    display: block; height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, #7a0b12, var(--mint) 70%, var(--coral));
+    box-shadow: 0 0 10px rgba(255, 59, 47, .5);
+    transition: width .09s linear;
+  }
+  .mic-val {
+    font-family: var(--mono); font-size: 10px; color: var(--mint);
+    min-width: 24px; text-align: right;
+  }
+
+  /* ---------- quick actions ---------- */
+  .actions { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+  .actions-grid button {
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 10px;
+    background: linear-gradient(160deg, var(--surface-2), #14070f);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--text);
+    font-family: inherit; font-size: 10px; font-weight: 500;
+    letter-spacing: .7px; text-transform: uppercase;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, transform .1s ease, box-shadow .15s ease;
+  }
+  .actions-grid button:hover {
+    background: linear-gradient(160deg, #2a0d16, #190810);
+    border-color: var(--line-strong);
+    box-shadow: 0 0 14px rgba(255, 59, 47, .18);
+  }
+  .actions-grid button:active { transform: scale(.97); }
+  .actions-grid button.primary {
+    grid-column: 1 / -1;
+    justify-content: center;
+    background: linear-gradient(150deg, rgba(255, 59, 47, .26), rgba(122, 11, 18, .35));
+    border-color: rgba(255, 59, 47, .55);
+    color: var(--bone);
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 11px;
+    box-shadow: 0 0 18px rgba(255, 59, 47, .22), inset 0 0 18px rgba(255, 59, 47, .10);
+  }
+  .actions-grid button.primary:hover { background: rgba(255, 59, 47, .32); }
+
+  /* ---------- conversation ---------- */
+  .convo { min-height: 0; }
+
+  #log {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+  }
+  #log::-webkit-scrollbar { width: 7px; }
+  #log::-webkit-scrollbar-thumb {
+    background: var(--surface-3); border-radius: 999px;
+  }
+  #log::-webkit-scrollbar-track { background: transparent; }
+
+  .line {
+    display: grid;
+    grid-template-columns: 58px 1fr;
+    gap: 10px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    animation: fade .2s ease;
+  }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  .line::before {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    padding-top: 3px;
+    color: var(--muted);
+  }
+  .line.you::before   { content: "YOU";   color: var(--violet); }
+  .line.matty::before { content: "MATTY"; color: var(--mint); }
+  .line.sys::before   { content: "SYS";   color: var(--muted); }
+
+  .line.you .txt,
+  .line.matty .txt { color: var(--text); }
+  .line.sys .txt { color: var(--muted); font-style: italic; }
+
+  .composer {
+    margin-top: 13px;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 11px 14px;
+  }
+  .composer span { color: var(--muted); font-size: 13px; }
+  #searchInput {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12.5px;
+  }
+  #searchInput::placeholder { color: var(--muted); }
+
+  /* ---------- right column ---------- */
+  .right { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+  .vital { margin-bottom: 11px; }
+  .vital:last-child { margin-bottom: 0; }
+  .vital .row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 9.5px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 5px;
+  }
+  .vital .row b {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--text); letter-spacing: 0;
+  }
+  .bar {
+    height: 5px; border-radius: 999px; overflow: hidden;
+    background: var(--surface-3);
+  }
+  .bar i {
+    display: block; height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, #7a0b12, var(--mint) 70%, var(--coral));
+    box-shadow: 0 0 10px rgba(255, 59, 47, .35);
+    transition: width .45s ease;
+  }
+  .bar.violet i { background: linear-gradient(90deg, #4a0a52, var(--violet)); }
+  .bar.amber  i { background: linear-gradient(90deg, #5a3200, var(--amber)); }
+
+  #market { display: flex; flex-direction: column; gap: 2px; }
+  .ticker {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 11.5px;
+  }
+  .ticker:last-child { border-bottom: 0; }
+  .ticker .name { color: var(--muted); letter-spacing: .6px; }
+  .ticker .val { font-family: var(--mono); color: var(--text); margin-right: 9px; }
+  .ticker .pct { font-family: var(--mono); font-size: 10.5px; }
+  .pct.up { color: var(--coral); }
+  .pct.down { color: var(--mint); }
+
+  .brief {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+  .brief:last-child { border-bottom: 0; }
+  .brief b { font-weight: 600; }
+  .brief small { display: block; color: var(--muted); font-size: 10.5px; margin-top: 2px; }
+  .brief .when { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+
+  /* ---------- footer ---------- */
+  footer {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px;
+    font-size: 10px; letter-spacing: 1.3px; text-transform: uppercase;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+  }
+  footer .left { display: flex; align-items: center; gap: 14px; }
+  footer .temp { color: var(--text); font-family: var(--mono); letter-spacing: 0; }
+  footer #footDate { font-family: var(--mono); letter-spacing: .5px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= TOP BAR ================= -->
+  <header>
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">MATTY</div>
+        <div class="brand-sub">Mark VIII · Executive Assistant</div>
+      </div>
+    </div>
+
+    <div class="clock-block">
+      <div class="clock" id="clock">00:00:00</div>
+      <div class="clock-date" id="date">loading date</div>
+    </div>
+
+    <div class="header-right">
+      <div class="pill"><span class="dot" style="color:var(--violet)"></span>AI
+        <strong id="cloudState">ONLINE</strong>
+      </div>
+      <div class="pill"><span class="dot" style="color:var(--mint)"></span>
+        <strong id="statusBadge">STANDBY</strong>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= LEFT RAIL ================= -->
+  <div class="rail">
+
+    <section class="card status-card">
+      <div class="card-head">
+        <span class="card-title">Assistant state</span>
+        <span class="card-tag">CORE</span>
+      </div>
+
+      <div class="status-word" id="centerStatus">STANDBY</div>
+      <div class="status-sub" id="waveState">LISTENING</div>
+
+      <div class="wave-wrap"><canvas id="wave"></canvas></div>
+
+      <div class="mic-row">
+        <span class="mic-label">MIC</span>
+        <div class="meter"><i id="micBar"></i></div>
+        <span class="mic-val" id="micVal">0</span>
+      </div>
+
+      <div class="session">
+        <span>Wake session</span>
+        <b id="sessionVal">—</b>
+      </div>
+    </section>
+
+    <section class="card actions">
+      <div class="card-head">
+        <span class="card-title">Quick actions</span>
+        <span class="card-tag">LOCAL</span>
+      </div>
+      <div class="actions-grid">
+        <button class="primary" onclick="quickActivate()">🎤 WAKE</button>
+        <button onclick="quickYouTube()">▶ YouTube</button>
+        <button onclick="quickWhatsApp()">💬 WhatsApp</button>
+        <button onclick="quickEmail()">✉ Email</button>
+        <button onclick="quickLock()">🔒 Lock</button>
+        <button onclick="quickScreenshot()">📸 Snap</button>
+        <button onclick="quickTestMic()">🎙 Mic test</button>
+        <button onclick="quickTestCloud()">☁ Cloud</button>
+        <button onclick="quickSetKey()">🔑 Key</button>
+        <button onclick="quickSetupEmail()">⚙ Mail setup</button>
+        <button onclick="quickAddContact()">👤 Contact</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= CONVERSATION ================= -->
+  <section class="card convo">
+    <div class="card-head">
+      <span class="card-title">Conversation</span>
+      <span class="card-tag">LIVE</span>
+    </div>
+
+    <div id="log"></div>
+
+    <div class="composer">
+      <span>⌘</span>
+      <input id="searchInput" placeholder="Type a command, or say 'Hello Matty'…" />
+    </div>
+  </section>
+
+  <!-- ================= RIGHT COLUMN ================= -->
+  <div class="right">
+
+    <section class="card">
+      <div class="card-head">
+        <span class="card-title">Hardware</span>
+        <span class="card-tag">SYNC</span>
+      </div>
+      <div class="vital">
+        <div class="row"><span>CPU</span><b id="cpuText">0%</b></div>
+        <div class="bar"><i id="cpuBar"></i></div>
+      </div>
+      <div class="vital">
+        <div class="row"><span>Memory</span><b id="ramText">0%</b></div>
+        <div class="bar violet"><i id="ramBar"></i></div>
+      </div>
+      <div class="vital">
+        <div class="row"><span>Disk</span><b id="diskText">0%</b></div>
+        <div class="bar amber"><i id="diskBar"></i></div>
+      </div>
+      <div class="vital">
+        <div class="row"><span>Battery</span><b id="battText">0%</b></div>
+        <div class="bar"><i id="battBar"></i></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <span class="card-title">Markets</span>
+        <span class="card-tag">LIVE</span>
+      </div>
+      <div id="market">
+        <div class="ticker"><span class="name">NIFTY 50</span><span><span class="val">24,850</span><span class="pct up">+0.42%</span></span></div>
+        <div class="ticker"><span class="name">SENSEX</span><span><span class="val">81,220</span><span class="pct down">-0.18%</span></span></div>
+        <div class="ticker"><span class="name">RELIANCE</span><span><span class="val">2,940</span><span class="pct up">+0.65%</span></span></div>
+        <div class="ticker"><span class="name">NVIDIA</span><span><span class="val">$182.4</span><span class="pct up">+1.12%</span></span></div>
+        <div class="ticker"><span class="name">BITCOIN</span><span><span class="val">$68,420</span><span class="pct down">-0.90%</span></span></div>
+      </div>
+    </section>
+
+    <section class="card" style="flex:1; min-height:0; overflow:auto">
+      <div class="card-head">
+        <span class="card-title">Briefings</span>
+        <span class="card-tag">3 NEW</span>
+      </div>
+      <div class="brief"><b>Project sync</b> <span class="when">· 09:40</span>
+        <small>Team meeting moved to 11:00. Agenda updated.</small></div>
+      <div class="brief"><b>Server alert</b> <span class="when">· 08:15</span>
+        <small>CPU spike resolved. No action required.</small></div>
+      <div class="brief"><b>Client report</b> <span class="when">· 07:02</span>
+        <small>Weekly report ready for review.</small></div>
+    </section>
+  </div>
+
+  <!-- ================= FOOTER ================= -->
+  <footer>
+    <div class="left">
+      <span>◐ <span class="temp" id="weatherTemp">29°C</span></span>
+      <span>Partly cloudy</span>
+    </div>
+    <div class="left">
+      <span>Local + cloud</span>
+      <span id="footDate">00/00/0000</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+  // =====================================================================
+  // HOW THE PAGE TALKS TO PYTHON
+  // ---------------------------------------------------------------------
+  //   Python  -> page   setMattyState / addMattyLog / setVitals /
+  //                     setMicLevel / setCloudStatus   (via evaluate_js)
+  //   page    -> Python window.pywebview.api.run_action(kind, args)
+  // =====================================================================
+
+  // ----- STEP 1: clock -----
+  const clockEl = document.getElementById("clock");
+  const dateEl = document.getElementById("date");
+  const footDate = document.getElementById("footDate");
+  const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+  function tickClock() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    clockEl.textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    dateEl.textContent = `${DAYS[d.getDay()]} · ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    footDate.textContent = `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  // ----- STEP 2: state, session countdown, waveform -----
+  const statusBadge = document.getElementById("statusBadge");
+  const centerStatus = document.getElementById("centerStatus");
+  const waveState = document.getElementById("waveState");
+  const sessionVal = document.getElementById("sessionVal");
+
+  let state = "STANDBY";
+  let phase = 0;
+  let micLevel = 0;       // 0-100, pushed by Python while recording
+  let activeUntil = 0;    // ms timestamp of the end of the wake session
+
+  const STATE_COLORS = {
+    STANDBY: "var(--amber)",
+    ACTIVE: "var(--mint)",
+    PROCESSING: "var(--violet)",
+    SPEAKING: "var(--coral)",
+    STOPPED: "var(--muted)",
+    "NO MIC": "var(--mint)",
+  };
+
+  window.setMattyState = function (s, text) {
+    state = s;
+    statusBadge.textContent = s;
+    centerStatus.textContent = s;
+    waveState.textContent = text || (s === "STANDBY" ? "SAY 'HELLO MATTY'" : "READY");
+
+    const color = STATE_COLORS[s] || "var(--mint)";
+    statusBadge.style.color = color;
+    centerStatus.style.color = color;
+    statusBadge.parentElement.querySelector(".dot").style.color = color;
+
+    // A fresh ACTIVE state opens a two minute session window.
+    if (s === "ACTIVE") activeUntil = Date.now() + 120000;
+  };
+
+  function tickSession() {
+    const left = activeUntil - Date.now();
+    if (left <= 0) {
+      sessionVal.textContent = "—";
+      sessionVal.style.color = "var(--muted)";
+      return;
+    }
+    const m = Math.floor(left / 60000);
+    const sec = Math.floor((left % 60000) / 1000);
+    sessionVal.textContent = `${m}:${String(sec).padStart(2, "0")}`;
+    sessionVal.style.color = "var(--mint)";
+  }
+  setInterval(tickSession, 500);
+
+  // waveform canvas
+  const canvas = document.getElementById("wave");
+  const ctx = canvas.getContext("2d");
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, rect.width * dpr);
+    canvas.height = Math.max(1, rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  function drawWave() {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (w < 4 || h < 4) { requestAnimationFrame(drawWave); return; }
+
+    const mid = h / 2;
+    // Height follows the real microphone level while listening.
+    const amp =
+      state === "STOPPED" ? 1 :
+      state === "SPEAKING" ? 12 :
+      Math.max(2, Math.min(22, 2 + micLevel * 0.22));
+
+    const color =
+      state === "NO MIC" ? "255, 59, 47" :
+      state === "PROCESSING" ? "192, 38, 211" :
+      state === "SPEAKING" ? "255, 138, 61" :
+      "255, 59, 47";
+
+    for (let layer = 0; layer < 3; layer++) {
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 3) {
+        const k = x / w;
+        const y = mid +
+          Math.sin(k * 7 + phase + layer * 0.8) * amp * (1 - layer * 0.22) *
+          Math.sin(k * Math.PI);
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.lineWidth = layer === 0 ? 1.8 : 1;
+      ctx.strokeStyle = `rgba(${color}, ${0.75 - layer * 0.22})`;
+      ctx.stroke();
+    }
+    phase += 0.055;
+    requestAnimationFrame(drawWave);
+  }
+  drawWave();
+
+  // ----- STEP 3: live microphone level -----
+  const micBar = document.getElementById("micBar");
+  const micVal = document.getElementById("micVal");
+
+  window.setMicLevel = function (pct) {
+    micLevel = pct;
+    micBar.style.width = pct + "%";
+    micVal.textContent = pct;
+  };
+
+  // ----- STEP 4: transcript -----
+  const logEl = document.getElementById("log");
+
+  window.addMattyLog = function (role, text) {
+    const row = document.createElement("div");
+    row.className = "line " + (role === "you" ? "you" : role === "matty" ? "matty" : "sys");
+
+    const body = document.createElement("span");
+    body.className = "txt";
+    body.textContent = text;
+    row.appendChild(body);
+
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+
+    // keep the transcript light: drop the oldest rows beyond 200
+    while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+
+    // any new utterance refreshes the visible session countdown
+    if (role === "you" && state === "ACTIVE") activeUntil = Date.now() + 120000;
+  };
+
+  // ----- STEP 5: hardware meters -----
+  function setBar(textId, barId, value) {
+    const t = document.getElementById(textId);
+    const b = document.getElementById(barId);
+    if (t) t.textContent = value + "%";
+    if (b) b.style.width = Math.max(0, Math.min(100, value)) + "%";
+  }
+
+  window.setVitals = function (cpu, ram, disk, batt) {
+    setBar("cpuText", "cpuBar", cpu);
+    setBar("ramText", "ramBar", ram);
+    setBar("diskText", "diskBar", disk);
+    if (batt !== undefined && batt !== null) setBar("battText", "battBar", batt);
+  };
+
+  // ----- STEP 6: cloud status -----
+  const cloudState = document.getElementById("cloudState");
+
+  window.setCloudStatus = function (online) {
+    cloudState.textContent = online ? "ONLINE" : "OFFLINE";
+    cloudState.style.color = online ? "var(--mint)" : "var(--amber)";
+  };
+
+  // ----- STEP 7: buttons -----
+  function apiReady() { return window.pywebview && window.pywebview.api; }
+
+  function run(kind, args) {
+    if (!apiReady()) {
+      addMattyLog("sys", "Desktop bridge is not ready yet.");
+      return;
+    }
+    const p = window.pywebview.api.run_action(kind, args || {});
+    if (p && p.then) {
+      p.then((r) => { if (r) addMattyLog("matty", r); })
+       .catch((e) => addMattyLog("sys", String(e)));
+    }
+  }
+
+  function quickActivate()  { run("activate"); window.setMattyState("ACTIVE"); }
+  function quickTestMic()   { addMattyLog("sys", "Recording 3 s — say something…"); run("test_mic"); }
+  function quickTestCloud() { addMattyLog("sys", "Calling the cloud model…"); run("test_cloud"); }
+  function quickScreenshot(){ run("screenshot"); }
+  function quickLock()      { if (confirm("Lock the laptop now?")) run("lock"); }
+
+  function quickYouTube() {
+    const q = prompt("Song or video to play on YouTube?");
+    if (q) run("youtube", { query: q });
+  }
+  function quickWhatsApp() {
+    const c = prompt("Contact name or phone number:");
+    if (!c) return;
+    const m = prompt("Message:", "Hello from Matty");
+    run("whatsapp", { contact: c, message: m || "Hello from Matty" });
+  }
+  function quickEmail() {
+    const to = prompt("Recipient email:");
+    if (!to) return;
+    const subject = prompt("Subject:", "") || "";
+    const body = prompt("Message:", "") || "";
+    run("email", { to: to, subject: subject, body: body });
+  }
+  function quickSetKey() {
+    const key = prompt("Paste your Groq API key (starts with gsk_)\nGet one at https://console.groq.com/keys");
+    if (key) run("set_key", { key: key.trim() });
+  }
+  function quickSetupEmail() {
+    const email = prompt("Your Gmail address:");
+    if (!email) return;
+    const pass = prompt("Gmail app password (16 characters):");
+    if (!pass) return;
+    run("setup_email", { email: email, password: pass });
+  }
+  function quickAddContact() {
+    const name = prompt("Contact name:");
+    if (!name) return;
+    const phone = prompt("Phone number with country code:");
+    if (!phone) return;
+    run("add_contact", { name: name, phone: phone });
+  }
+
+  // typed commands take the same path as speech
+  document.getElementById("searchInput").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && this.value.trim()) {
+      addMattyLog("you", this.value.trim());
+      run("command", { text: this.value.trim() });
+      this.value = "";
+    }
+  });
+
+  // ----- first paint -----
+  window.setMattyState("STANDBY");
+  window.setVitals(0, 0, 0, 0);
+  addMattyLog("sys", "Interface online. Say 'Hello Matty' or click WAKE.");
+</script>
+</body>
+</html>
