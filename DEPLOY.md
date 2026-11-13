@@ -73,6 +73,30 @@ and the transcript reports `Web edition: ...` on load.
 
 ---
 
+## Troubleshooting
+
+### `bash: start_matty.bat: command not found`
+The service was created manually and Render guessed the start command from the
+only "start" file in the repo. Set the Build/Start commands from the table
+above, or delete the service and redeploy from the Blueprint.
+
+### `bash: gunicorn: command not found`
+The **build** installed `requirements.txt` (desktop) instead of
+`requirements-web.txt`, so gunicorn was never installed. Either fix the build
+command, or rely on the `gunicorn>=21.2; sys_platform != "win32"` line now
+present in `requirements.txt`.
+
+### `Application object must be callable`
+The start command is missing `:app` - it must be `gunicorn app:app`, not
+`gunicorn app`.
+
+### Page loads but stays OFFLINE
+`GROQ_API_KEY` is missing or invalid. Run
+`curl -X POST <url>/api/action -H "Content-Type: application/json" -d '{"kind":"test_cloud"}'`
+to see the exact provider error.
+
+---
+
 ## Free tier notes
 
 - The service **sleeps after 15 minutes** of inactivity; the next request takes

@@ -17,3 +17,9 @@ pywhatkit>=5.4
 pyaudiowpatch>=0.2.12.9; sys_platform == "win32"
 pycaw>=20240210; sys_platform == "win32"
 pywin32>=306; sys_platform == "win32"
+
+# Web edition (Render). Kept here as well as in requirements-web.txt so a deploy
+# that points at this file still gets a working server. gunicorn is Unix-only,
+# hence the platform marker - Windows installs skip it.
+flask>=3.0; sys_platform != "win32"
+gunicorn>=21.2; sys_platform != "win32"
