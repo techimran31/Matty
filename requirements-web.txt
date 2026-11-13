@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# Web edition dependencies (Render / any Linux host).
+#
+# The desktop build uses requirements.txt (microphone, TTS, GUI, Windows APIs).
+# This file is only what server.py needs, so the build stays small and fast.
+#
+# We deliberately do NOT import matty_voice here: it needs PyAudio and audioop,
+# which have no place on a headless server.
+# ---------------------------------------------------------------------------
+flask>=3.0
+gunicorn>=21.2
+openai>=1.12.0
+requests>=2.31.0
+certifi>=2024.2.2
+psutil>=5.9.0

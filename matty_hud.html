@@ -497,7 +497,7 @@
 
     <section class="card">
       <div class="card-head">
-        <span class="card-title">Hardware</span>
+        <span class="card-title" id="hwTitle">Hardware</span>
         <span class="card-tag">SYNC</span>
       </div>
       <div class="vital">
@@ -741,21 +741,42 @@
   };
 
   // ----- STEP 7: buttons -----
-  function apiReady() { return window.pywebview && window.pywebview.api; }
+  // ----- STEP 8: transport (desktop bridge OR web API) -----
+  // Desktop build: pywebview exposes window.pywebview.api.run_action().
+  // Web build (Render): the same call is POSTed to /api/action in server.py.
+  // One HTML file therefore powers both editions.
+  function isDesktop() { return !!(window.pywebview && window.pywebview.api); }
 
-  function run(kind, args) {
-    if (!apiReady()) {
-      addMattyLog("sys", "Desktop bridge is not ready yet.");
-      return;
+  function callAction(kind, args) {
+    if (isDesktop()) {
+      return Promise.resolve(window.pywebview.api.run_action(kind, args || {}));
     }
-    const p = window.pywebview.api.run_action(kind, args || {});
-    if (p && p.then) {
-      p.then((r) => { if (r) addMattyLog("matty", r); })
-       .catch((e) => addMattyLog("sys", String(e)));
-    }
+    return fetch("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: kind, args: args || {} }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.url) window.open(d.url, "_blank", "noopener");
+        return d.result || d.error || "No response";
+      });
   }
 
-  function quickActivate()  { run("activate"); window.setMattyState("ACTIVE"); }
+  function run(kind, args) {
+    callAction(kind, args)
+      .then((r) => { if (r) addMattyLog("matty", r); })
+      .catch((e) => addMattyLog("sys", String(e)));
+  }
+
+  function quickActivate() {
+    if (!isDesktop()) {
+      addMattyLog("sys", "The wake word needs the desktop app - type a command instead.");
+      return;
+    }
+    run("activate");
+    window.setMattyState("ACTIVE");
+  }
   function quickTestMic()   { addMattyLog("sys", "Recording 3 s — say something…"); run("test_mic"); }
   function quickTestCloud() { addMattyLog("sys", "Calling the cloud model…"); run("test_cloud"); }
   function quickScreenshot(){ run("screenshot"); }
@@ -809,7 +830,36 @@
   // ----- first paint -----
   window.setMattyState("STANDBY");
   window.setVitals(0, 0, 0, 0);
-  addMattyLog("sys", "Interface online. Say 'Hello Matty' or click WAKE.");
+
+  // Web build: no microphone and no PC control, so be explicit about it and
+  // show the server's own metrics instead of pretending to be a desktop.
+  function startWebMode() {
+    const hw = document.getElementById("hwTitle");
+    if (hw) hw.textContent = "Server host";
+    addMattyLog("sys", "Web edition: AI answers and market data work; microphone, speech and PC control need the desktop app.");
+
+    const poll = () => {
+      fetch("/api/status")
+        .then((r) => r.json())
+        .then((s) => window.setCloudStatus(!!s.ready))
+        .catch(() => {});
+      fetch("/api/vitals")
+        .then((r) => r.json())
+        .then((v) => window.setVitals(v.cpu, v.ram, v.disk, null))
+        .catch(() => {});
+      setTimeout(poll, 5000);
+    };
+    poll();
+  }
+
+  // pywebview injects its bridge before this script runs; give it a moment.
+  setTimeout(() => {
+    if (isDesktop()) {
+      addMattyLog("sys", "Interface online. Say 'Hello Matty' or click WAKE.");
+    } else {
+      startWebMode();
+    }
+  }, 300);
 </script>
 </body>
 </html>

@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# render.yaml - one-click Render blueprint for Matty's web edition
+#
+# Render -> New + -> Blueprint -> pick the techimran31/Matty repo.
+# Render reads this file, builds the service and asks for GROQ_API_KEY.
+# ---------------------------------------------------------------------------
+services:
+  - type: web
+    name: matty
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      # Python 3.12: 3.13+ removed the audioop module that SpeechRecognition
+      # depends on, so 3.12 keeps the dependency set installable.
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+
+      # Set in the Render dashboard (Environment tab). sync:false means
+      # "do not store a value in the repo - ask for it on first deploy".
+      - key: GROQ_API_KEY
+        sync: false
+
+      # Optional: force a transcription language instead of auto-detecting.
+      # - key: MATTY_LANG
+      #   value: hi-IN
